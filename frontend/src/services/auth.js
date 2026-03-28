@@ -1,7 +1,20 @@
 import api from './api';
 
 export const register = async (userData) => {
-  const response = await api.post('/auth/register', userData);
+  // Map frontend camelCase to backend snake_case
+  const mappedData = {
+    email: userData.email,
+    password: userData.password,
+    user_type: userData.userType,      // Map userType -> user_type
+    company_name: userData.companyName, // Map companyName -> company_name
+    industry: userData.industry,
+    location: userData.location,
+    phone: userData.phone || null
+  };
+  
+  console.log('📤 Sending to backend:', mappedData);
+  
+  const response = await api.post('/auth/register', mappedData);
   return response.data.data;
 };
 
