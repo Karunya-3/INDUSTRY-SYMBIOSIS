@@ -1,7 +1,8 @@
 from flask import request, jsonify, url_for
 from flask_mail import Message
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
-from app.routes import auth_bp
+from flask import Blueprint
+auth_bp = Blueprint('auth', __name__)
 from app.models.user import User
 from app.middleware.auth import jwt_required as custom_jwt_required
 from app.utils.helpers import validate_email, validate_password, success_response, error_response

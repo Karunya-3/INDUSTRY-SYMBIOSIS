@@ -147,3 +147,42 @@ class User:
             'is_verified': self.data['is_verified'],
             'created_at': self.data['created_at'].isoformat() if self.data.get('created_at') else None
         }
+    # Add this method to your User class in models/user.py
+
+    def update_profile(self, **kwargs):
+        """Update user profile fields"""
+        db = get_db()
+    
+        # Fields that can be updated
+        updatable_fields = ['company_name', 'email', 'industry', 'location', 'phone']
+    
+        update_data = {}
+        for field in updatable_fields:
+            if field in kwargs and kwargs[field] is not None:
+                update_data[field] = kwargs[field]
+    
+        if not update_data:
+            return self
+    
+        # If email is being updated, check if it's already taken
+        if 'email' in update_data and update_data['email'] != self.data['email']:
+            existing_user = db.users.find_one({
+                'email': update_data['email'],
+                '_id': {'$ne': self.data['_id']}
+            })
+            if existing_user:
+                raise ValueError("Email already registered")
+    
+        # Add updated timestamp
+        update_data['updated_at'] = datetime.utcnow()
+    
+        # Update the user in database
+        db.users.update_one(
+            {'_id': self.data['_id']},
+            {'$set': update_data}
+        )
+    
+        # Update local data
+        self.data.update(update_data)
+    
+        return self

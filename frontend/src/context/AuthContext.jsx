@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as authService from '../services/auth';
 import { jwtDecode } from 'jwt-decode';
+import { set } from 'react-hook-form';
 
 const AuthContext = createContext(null);
 
@@ -90,6 +91,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    setUser,
     loading,
     isAuthenticated: !!user,
     login,

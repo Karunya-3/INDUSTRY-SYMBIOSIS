@@ -1,5 +1,2 @@
-from flask import Blueprint
-
-auth_bp = Blueprint('auth', __name__)
-
-from app.routes import auth
+from .auth import auth_bp
+from .users import users_bp
