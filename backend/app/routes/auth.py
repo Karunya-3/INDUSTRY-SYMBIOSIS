@@ -1,14 +1,13 @@
-from flask import request, jsonify, url_for
-from flask_mail import Message
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
-from flask import Blueprint
-auth_bp = Blueprint('auth', __name__)
+from flask_mail import Message
+import datetime
 from app.models.user import User
 from app.middleware.auth import jwt_required as custom_jwt_required
 from app.utils.helpers import validate_email, validate_password, success_response, error_response
-from app import mail
 from config import Config
-import datetime
+
+auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -50,21 +49,27 @@ def register():
             phone=data.get('phone')
         )
         
-        # Send verification email
+        # Send verification email using current_app.mail
         try:
             verification_link = f"{Config.FRONTEND_URL}/verify-email/{user.data['verification_token']}"
-            msg = Message(
-                subject="Verify Your Email - Industrial Symbiosis Matchmaker",
-                recipients=[email],
-                html=f"""
-                <h1>Welcome to Industrial Symbiosis Matchmaker!</h1>
-                <p>Please click the link below to verify your email address:</p>
-                <a href="{verification_link}">{verification_link}</a>
-                <p>This link will expire in 24 hours.</p>
-                <p>If you didn't create an account, please ignore this email.</p>
-                """
-            )
-            mail.send(msg)
+            
+            # Get mail from current_app extensions
+            mail = current_app.extensions.get('mail')
+            if mail:
+                msg = Message(
+                    subject="Verify Your Email - Industrial Symbiosis Matchmaker",
+                    recipients=[email],
+                    html=f"""
+                    <h1>Welcome to Industrial Symbiosis Matchmaker!</h1>
+                    <p>Please click the link below to verify your email address:</p>
+                    <a href="{verification_link}">{verification_link}</a>
+                    <p>This link will expire in 24 hours.</p>
+                    <p>If you didn't create an account, please ignore this email.</p>
+                    """
+                )
+                mail.send(msg)
+            else:
+                print("Mail extension not available")
         except Exception as e:
             print(f"Error sending email: {e}")
         
@@ -172,20 +177,25 @@ def forgot_password():
             # Generate reset token
             reset_token = user.generate_reset_token()
             
-            # Send reset email
-            reset_link = f"{Config.FRONTEND_URL}/reset-password/{reset_token}"
-            msg = Message(
-                subject="Reset Your Password - Industrial Symbiosis Matchmaker",
-                recipients=[email],
-                html=f"""
-                <h1>Password Reset Request</h1>
-                <p>Click the link below to reset your password:</p>
-                <a href="{reset_link}">{reset_link}</a>
-                <p>This link will expire in 24 hours.</p>
-                <p>If you didn't request this, please ignore this email.</p>
-                """
-            )
-            mail.send(msg)
+            # Send reset email using current_app.mail
+            try:
+                mail = current_app.extensions.get('mail')
+                if mail:
+                    reset_link = f"{Config.FRONTEND_URL}/reset-password/{reset_token}"
+                    msg = Message(
+                        subject="Reset Your Password - Industrial Symbiosis Matchmaker",
+                        recipients=[email],
+                        html=f"""
+                        <h1>Password Reset Request</h1>
+                        <p>Click the link below to reset your password:</p>
+                        <a href="{reset_link}">{reset_link}</a>
+                        <p>This link will expire in 24 hours.</p>
+                        <p>If you didn't request this, please ignore this email.</p>
+                        """
+                    )
+                    mail.send(msg)
+            except Exception as email_error:
+                print(f"Error sending reset email: {email_error}")
         
         # Always return success to prevent email enumeration
         return success_response("If the email exists, a reset link has been sent")

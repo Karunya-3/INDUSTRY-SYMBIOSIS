@@ -24,15 +24,17 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className={`bg-white rounded-lg shadow-xl ${sizes[size]} w-full`}
+              className={`bg-white rounded-lg shadow-xl ${sizes[size]} w-full max-h-[90vh] flex flex-col`}
               onClick={(e) => e.stopPropagation()}
             >
               {title && (
-                <div className="px-6 py-4 border-b border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
                   <h3 className="text-lg font-semibold">{title}</h3>
                 </div>
               )}
-              <div className="px-6 py-4">{children}</div>
+              <div className="px-6 py-4 overflow-y-auto flex-1">
+                {children}
+              </div>
             </motion.div>
           </motion.div>
         </>

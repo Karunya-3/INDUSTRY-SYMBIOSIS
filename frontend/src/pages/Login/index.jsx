@@ -38,9 +38,19 @@ const Login = () => {
   const onSubmit = async (data) => {
     setIsLoading(true);
     try {
-      await login(data.email, data.password, data.remember);
-      toast.success('Login successful!');
-      navigate('/dashboard');
+      // FIXED: Pass the data object correctly
+      const result = await login({ 
+        email: data.email, 
+        password: data.password, 
+        remember: data.remember 
+      });
+      
+      if (result.success) {
+        toast.success('Login successful!');
+        navigate('/dashboard');
+      } else {
+        toast.error(result.error);
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Login failed');
     } finally {

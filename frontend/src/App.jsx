@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
+import { ResourceProvider } from './context/ResourceContext';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
@@ -14,22 +15,24 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <Toaster position="top-right" />
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/verify-email/:token" element={<VerifyEmail />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
-          <Route
-            path="/dashboard/*"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+        <ResourceProvider>
+          <Toaster position="top-right" />
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
+            <Route
+              path="/dashboard/*"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </ResourceProvider>
       </AuthProvider>
     </Router>
   );
@@ -79,7 +82,7 @@ function VerifyEmail() {
             <p className="text-gray-600 mt-2">Please try again or contact support.</p>
             <button
               onClick={() => navigate('/login')}
-              className="mt-4 btn-primary"
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Go to Login
             </button>

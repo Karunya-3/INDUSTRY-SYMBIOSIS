@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as authService from '../services/auth';
 import { jwtDecode } from 'jwt-decode';
-import { set } from 'react-hook-form';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -16,20 +16,28 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [accessToken, setAccessToken] = useState(localStorage.getItem('access_token'));
+  const [accessToken, setAccessToken] = useState(null);
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('access_token');
+      // Check both localStorage and sessionStorage for token
+      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+      
       if (token) {
         try {
           const decoded = jwtDecode(token);
           if (decoded.exp * 1000 > Date.now()) {
+            // Token is valid
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            setAccessToken(token);
+            
+            // Fetch user data
             const userData = await authService.getCurrentUser();
             setUser(userData);
-            setAccessToken(token);
+            console.log('Auth initialized, user:', userData);
           } else {
             // Token expired, try to refresh
+            console.log('Token expired, attempting refresh...');
             await refreshToken();
           }
         } catch (error) {
@@ -47,37 +55,78 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authService.refreshToken();
       const { access_token } = response;
-      localStorage.setItem('access_token', access_token);
+      
+      // Store in same location as original token
+      const isLocalStorage = localStorage.getItem('refresh_token');
+      if (isLocalStorage) {
+        localStorage.setItem('access_token', access_token);
+      } else {
+        sessionStorage.setItem('access_token', access_token);
+      }
+      
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       setAccessToken(access_token);
+      
       const userData = await authService.getCurrentUser();
       setUser(userData);
       return true;
     } catch (error) {
+      console.error('Refresh token failed:', error);
       logout();
       return false;
     }
   };
 
-  const login = async (email, password, remember = false) => {
-    const response = await authService.login(email, password);
-    const { access_token, refresh_token, user: userData } = response;
-    
-    if (remember) {
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-    } else {
-      sessionStorage.setItem('access_token', access_token);
-      sessionStorage.setItem('refresh_token', refresh_token);
+  // FIXED: Accept object parameter instead of separate parameters
+  const login = async (credentials) => {
+    try {
+      const { email, password, remember = false } = credentials;
+      const response = await authService.login(email, password, remember);
+      
+      console.log('Login response:', response);
+      
+      const { access_token, refresh_token, user: userData } = response.data ?? response;
+      
+      if (!access_token) {
+        throw new Error('No access token received');
+      }
+      
+      // Store tokens based on remember preference
+      if (remember) {
+        localStorage.setItem('access_token', access_token);
+        if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
+      } else {
+        sessionStorage.setItem('access_token', access_token);
+        if (refresh_token) sessionStorage.setItem('refresh_token', refresh_token);
+      }
+      
+      // Set authorization header for future requests
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      
+      setAccessToken(access_token);
+      setUser(userData);
+      
+      return { success: true, data: response };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.response?.data?.error || 'Login failed' 
+      };
     }
-    
-    setAccessToken(access_token);
-    setUser(userData);
-    return userData;
   };
 
   const register = async (userData) => {
-    const response = await authService.register(userData);
-    return response;
+    try {
+      const response = await authService.register(userData);
+      return { success: true, data: response };
+    } catch (error) {
+      console.error('Registration error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.response?.data?.error || 'Registration failed' 
+      };
+    }
   };
 
   const logout = () => {
@@ -85,6 +134,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('refresh_token');
     sessionStorage.removeItem('access_token');
     sessionStorage.removeItem('refresh_token');
+    delete api.defaults.headers.common['Authorization'];
     setUser(null);
     setAccessToken(null);
   };
@@ -93,7 +143,7 @@ export const AuthProvider = ({ children }) => {
     user,
     setUser,
     loading,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && !!accessToken, // FIXED: Check both user and token
     login,
     register,
     logout,

@@ -31,7 +31,10 @@ class User:
             'verification_token': secrets.token_urlsafe(32),
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow(),
-            'is_active': True
+            'is_active': True,
+            'coordinates': None,  # For location-based matching (lat/lng)
+            'total_matches': 0,   # For tracking match statistics
+            'resources_count': 0   # For tracking resources count
         }
         
         result = db.users.insert_one(user)
@@ -132,38 +135,21 @@ class User:
             }
         )
     
-    def to_dict(self):
-        """Convert user to dictionary (safe for API)"""
-        if not self.data:
-            return None
-        return {
-            'id': str(self.data['_id']),
-            'email': self.data['email'],
-            'user_type': self.data['user_type'],
-            'company_name': self.data['company_name'],
-            'industry': self.data['industry'],
-            'location': self.data['location'],
-            'phone': self.data.get('phone'),
-            'is_verified': self.data['is_verified'],
-            'created_at': self.data['created_at'].isoformat() if self.data.get('created_at') else None
-        }
-    # Add this method to your User class in models/user.py
-
     def update_profile(self, **kwargs):
         """Update user profile fields"""
         db = get_db()
-    
+        
         # Fields that can be updated
         updatable_fields = ['company_name', 'email', 'industry', 'location', 'phone']
-    
+        
         update_data = {}
         for field in updatable_fields:
             if field in kwargs and kwargs[field] is not None:
                 update_data[field] = kwargs[field]
-    
+        
         if not update_data:
             return self
-    
+        
         # If email is being updated, check if it's already taken
         if 'email' in update_data and update_data['email'] != self.data['email']:
             existing_user = db.users.find_one({
@@ -172,17 +158,137 @@ class User:
             })
             if existing_user:
                 raise ValueError("Email already registered")
-    
+        
         # Add updated timestamp
         update_data['updated_at'] = datetime.utcnow()
-    
+        
         # Update the user in database
         db.users.update_one(
             {'_id': self.data['_id']},
             {'$set': update_data}
         )
-    
+        
         # Update local data
         self.data.update(update_data)
-    
+        
         return self
+    
+    def update_coordinates(self, lat, lng):
+        """Update user's geographic coordinates for location-based matching"""
+        db = get_db()
+        coordinates = {'lat': lat, 'lng': lng}
+        db.users.update_one(
+            {'_id': self.data['_id']},
+            {'$set': {'coordinates': coordinates, 'updated_at': datetime.utcnow()}}
+        )
+        self.data['coordinates'] = coordinates
+    
+    def increment_resources_count(self):
+        """Increment user's resources count"""
+        db = get_db()
+        db.users.update_one(
+            {'_id': self.data['_id']},
+            {'$inc': {'resources_count': 1}, '$set': {'updated_at': datetime.utcnow()}}
+        )
+        if 'resources_count' in self.data:
+            self.data['resources_count'] += 1
+        else:
+            self.data['resources_count'] = 1
+    
+    def decrement_resources_count(self):
+        """Decrement user's resources count"""
+        db = get_db()
+        db.users.update_one(
+            {'_id': self.data['_id']},
+            {'$inc': {'resources_count': -1}, '$set': {'updated_at': datetime.utcnow()}}
+        )
+        if 'resources_count' in self.data:
+            self.data['resources_count'] -= 1
+    
+    def to_dict(self, public=False):
+        """Convert user to dictionary (safe for API)"""
+        if not self.data:
+            return None
+        
+        user_dict = {
+            'id': str(self.data['_id']),
+            'email': self.data['email'],
+            'user_type': self.data['user_type'],
+            'company_name': self.data['company_name'],
+            'industry': self.data['industry'],
+            'location': self.data['location'],
+            'phone': self.data.get('phone'),
+            'is_verified': self.data['is_verified'],
+            'created_at': self.data['created_at'].isoformat() if self.data.get('created_at') else None,
+            'updated_at': self.data['updated_at'].isoformat() if self.data.get('updated_at') else None,
+            'resources_count': self.data.get('resources_count', 0),
+            'total_matches': self.data.get('total_matches', 0)
+        }
+        
+        # Add coordinates if available
+        if self.data.get('coordinates'):
+            user_dict['coordinates'] = self.data['coordinates']
+        
+        # If public view, remove sensitive information
+        if public:
+            sensitive_fields = ['email', 'phone']
+            for field in sensitive_fields:
+                user_dict.pop(field, None)
+        
+        return user_dict
+    
+    def get_stats(self):
+        """Get user statistics"""
+        db = get_db()
+        
+        # Get resources stats
+        resources = list(db.resources.find({'user_id': str(self.data['_id'])}))
+        
+        waste_resources = [r for r in resources if r.get('resource_type') == 'waste']
+        input_resources = [r for r in resources if r.get('resource_type') == 'resource']
+        active_resources = [r for r in resources if r.get('status') == 'active']
+        
+        # Get matches count (simplified)
+        # In production, this would be a more complex query
+        matches_count = 0
+        for resource in resources:
+            # Count matches for this resource
+            matches = db.matches.count_documents({
+                '$or': [
+                    {'source_resource_id': str(resource['_id'])},
+                    {'target_resource_id': str(resource['_id'])}
+                ]
+            })
+            matches_count += matches
+        
+        return {
+            'total_resources': len(resources),
+            'waste_outputs': len(waste_resources),
+            'resource_inputs': len(input_resources),
+            'active_resources': len(active_resources),
+            'total_matches': matches_count,
+            'last_active': self.data.get('updated_at')
+        }
+    
+    def delete_account(self):
+        """Delete user account and all associated data"""
+        db = get_db()
+        
+        # Delete all user's resources
+        db.resources.delete_many({'user_id': str(self.data['_id'])})
+        
+        # Delete all user's embeddings
+        db.embeddings.delete_many({'user_id': str(self.data['_id'])})
+        
+        # Delete user's matches
+        db.matches.delete_many({
+            '$or': [
+                {'source_user_id': str(self.data['_id'])},
+                {'target_user_id': str(self.data['_id'])}
+            ]
+        })
+        
+        # Delete user
+        db.users.delete_one({'_id': self.data['_id']})
+        
+        return True

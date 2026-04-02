@@ -15,22 +15,22 @@ export const register = async (userData) => {
   console.log('📤 Sending to backend:', mappedData);
   
   const response = await api.post('/auth/register', mappedData);
-  return response.data.data;
+  return response.data; // Return full response, not just data.data
 };
 
-export const login = async (email, password) => {
-  const response = await api.post('/auth/login', { email, password });
-  return response.data.data;
+export const login = async (email, password, remember = false) => {
+  const response = await api.post('/auth/login', { email, password, remember });
+  return response.data; // Return full response with access_token, refresh_token, user
 };
 
 export const refreshToken = async () => {
   const response = await api.post('/auth/refresh');
-  return response.data.data;
+  return response.data;
 };
 
 export const getCurrentUser = async () => {
   const response = await api.get('/auth/me');
-  return response.data.data.user;
+  return response.data.user || response.data;
 };
 
 export const verifyEmail = async (token) => {
